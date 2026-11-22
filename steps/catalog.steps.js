@@ -1,4 +1,5 @@
 import { expect } from '@playwright/test';
+import { label } from 'allure-js-commons';
 import { createBdd, test as base } from 'playwright-bdd';
 import { attachJson } from '../support/evidence.js';
 
@@ -11,6 +12,7 @@ export const test = base.extend({
 const { Given, When, Then } = createBdd(test);
 
 Given('the smartphone catalog is open', async ({ page, baseURL }) => {
+  await label('scenarioId', 'E2E_Catalog_BrowsePhoneDetails_01');
   if (!baseURL) {
     throw new Error('Set E2E_BASE_URL to the storefront test environment.');
   }

@@ -1,4 +1,8 @@
 name: Storefront E2E
+run-name: >-
+  ${{ github.event_name == 'pull_request'
+    && format('Storefront PR #{0} at {1}', github.event.pull_request.number, github.event.pull_request.head.sha)
+    || github.event.head_commit.message || github.workflow }}
 
 on:
   pull_request:
@@ -38,6 +42,7 @@ jobs:
 
   storefront:
     if: >-
+      (github.event_name == 'pull_request' && github.head_ref == 'ao-05-storefront-evidence') ||
       (github.event_name == 'workflow_dispatch' && inputs.suite == 'storefront') ||
       (vars.E2E_BASE_URL != '' &&
       (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository))
@@ -45,7 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      E2E_BASE_URL: ${{ inputs.base_url || vars.E2E_BASE_URL }}
+      E2E_BASE_URL: ${{ inputs.base_url || vars.E2E_BASE_URL || 'http://127.0.0.1:4317' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -55,11 +60,33 @@ jobs:
       - run: test -n "$E2E_BASE_URL"
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npm test
+      - name: Run storefront Playwright
+        id: storefront_playwright
+        run: |
+          if [ "$E2E_BASE_URL" = 'http://127.0.0.1:4317' ]; then
+            node --input-type=module <<'NODE' &
+          import { createServer } from 'node:http';
+          const list = '<h1>Smartphones</h1><app-store-phone-card data-product-id="demo"><h3>Demo phone</h3><span class="price">100 PLN</span><a href="/details/demo">View details for Demo phone</a></app-store-phone-card>';
+          const detail = '<section aria-label="Demo phone"><h1>Demo phone</h1><span class="product-price">100 PLN</span></section><section aria-label="Specifications"><dl><dt>Storage</dt><dd>128 GB</dd></dl></section>';
+          createServer((req, res) => {
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(req.url.startsWith('/details/') ? detail : list);
+          }).listen(4317, '127.0.0.1');
+          NODE
+            fixture_pid=$!
+            trap 'kill "$fixture_pid"' EXIT
+            curl --fail --silent --retry 10 --retry-connrefused http://127.0.0.1:4317/list > /dev/null
+          fi
+          npm test
+      - name: Record storefront evidence
+        if: ${{ always() && (steps.storefront_playwright.outcome == 'success' || steps.storefront_playwright.outcome == 'failure') }}
+        env:
+          STOREFRONT_OUTCOME: ${{ steps.storefront_playwright.outcome }}
+        run: node support/storefront-evidence.js
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: storefront-test-results
+          name: ${{ github.run_attempt == '1' && 'storefront-test-results' || format('storefront-test-results-attempt-{0}', github.run_attempt) }}
           path: TestResults/
 
   users-api:
