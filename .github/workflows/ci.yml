@@ -1,0 +1,54 @@
+name: Storefront E2E
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Storefront test URL. Defaults to the E2E_BASE_URL repository variable.
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+
+  storefront:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (vars.E2E_BASE_URL != '' &&
+      (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository))
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      E2E_BASE_URL: ${{ inputs.base_url || vars.E2E_BASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: test -n "$E2E_BASE_URL"
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: storefront-test-results
+          path: TestResults/
