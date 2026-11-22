@@ -6,8 +6,17 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
+      suite:
+        description: Test suite to run.
+        type: choice
+        options: [storefront, users-api]
+        default: storefront
       base_url:
         description: Storefront test URL. Defaults to the E2E_BASE_URL repository variable.
+        type: string
+        required: false
+      users_api_url:
+        description: Isolated Users API test URL. Defaults to E2E_USERS_API_URL.
         type: string
         required: false
 
@@ -29,7 +38,7 @@ jobs:
 
   storefront:
     if: >-
-      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_dispatch' && inputs.suite == 'storefront') ||
       (vars.E2E_BASE_URL != '' &&
       (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository))
     needs: check
@@ -51,4 +60,26 @@ jobs:
         if: always()
         with:
           name: storefront-test-results
+          path: TestResults/
+
+  users-api:
+    if: github.event_name == 'workflow_dispatch' && inputs.suite == 'users-api'
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      E2E_USERS_API_URL: ${{ inputs.users_api_url || vars.E2E_USERS_API_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: test -n "$E2E_USERS_API_URL"
+      - run: npm ci
+      - run: npm run test:users
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: users-api-test-results
           path: TestResults/

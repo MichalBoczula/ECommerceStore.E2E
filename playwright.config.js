@@ -18,10 +18,21 @@ export default defineConfig({
   ],
   outputDir: 'TestResults/playwright-results',
   use: {
-    baseURL: process.env.E2E_BASE_URL,
     navigationTimeout: 90_000,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    {
+      name: 'chromium',
+      grepInvert: /@api\b/,
+      use: { ...devices['Desktop Chrome'], baseURL: process.env.E2E_BASE_URL },
+    },
+    {
+      name: 'users-api',
+      testMatch: '**/features/users/**/*.feature.spec.js',
+      grep: /@api\b/,
+      use: { baseURL: process.env.E2E_USERS_API_URL },
+    },
+  ],
 });
