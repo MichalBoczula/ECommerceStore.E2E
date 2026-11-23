@@ -16,7 +16,7 @@ on:
         options: [storefront, users-api]
         default: storefront
       base_url:
-        description: Storefront test URL. Defaults to the E2E_BASE_URL repository variable.
+        description: Storefront test URL. Defaults to the E2E_BASE_URL secret or variable.
         type: string
         required: false
       users_api_url:
@@ -43,35 +43,62 @@ jobs:
   storefront:
     if: >-
       (github.event_name == 'workflow_dispatch' && inputs.suite == 'storefront') ||
-      (vars.E2E_BASE_URL != '' &&
-      (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository))
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
     needs: check
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      E2E_BASE_URL: ${{ inputs.base_url || vars.E2E_BASE_URL }}
+      E2E_BASE_URL: ${{ inputs.base_url || secrets.E2E_BASE_URL || vars.E2E_BASE_URL }}
+      E2E_STOREFRONT_PRIVATE: ${{ !inputs.base_url && secrets.E2E_BASE_URL != '' }}
     steps:
+      - name: Report missing storefront URL
+        if: env.E2E_BASE_URL == ''
+        run: |
+          echo 'Set the E2E_BASE_URL secret or variable, or provide a base_url when dispatching.'
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then exit 1; fi
       - uses: actions/checkout@v4
+        if: env.E2E_BASE_URL != ''
       - uses: actions/setup-node@v4
+        if: env.E2E_BASE_URL != ''
         with:
           node-version: '24'
           cache: npm
-      - run: test -n "$E2E_BASE_URL"
+      - name: Validate storefront URL
+        if: env.E2E_BASE_URL != ''
+        run: |
+          node -e '
+            const url = URL.parse(process.env.E2E_BASE_URL);
+            if (!url || !["http:", "https:"].includes(url.protocol) || url.username || url.password) {
+              console.error("E2E_BASE_URL must be an HTTP(S) URL without user information.");
+              process.exit(1);
+            }
+            if (process.env.E2E_STOREFRONT_PRIVATE === "true") {
+              console.log("::add-mask::" + url.hostname);
+            }
+          '
       - run: npm ci
+        if: env.E2E_BASE_URL != ''
       - run: npx playwright install --with-deps chromium
+        if: env.E2E_BASE_URL != ''
       - name: Run storefront Playwright
         id: storefront_playwright
+        if: env.E2E_BASE_URL != ''
         run: npm test
       - name: Record storefront evidence
+        id: storefront_evidence
         if: ${{ always() && (steps.storefront_playwright.outcome == 'success' || steps.storefront_playwright.outcome == 'failure') }}
         env:
           STOREFRONT_OUTCOME: ${{ steps.storefront_playwright.outcome }}
         run: node support/storefront-evidence.js
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: ${{ always() && steps.storefront_evidence.outcome == 'success' }}
         with:
           name: ${{ github.run_attempt == '1' && 'storefront-test-results' || format('storefront-test-results-attempt-{0}', github.run_attempt) }}
-          path: TestResults/
+          path: |
+            TestResults/storefront-evidence.json
+            TestResults/allure-results/
+            ${{ env.E2E_STOREFRONT_PRIVATE == 'false' && 'TestResults/playwright-*/' || '' }}
 
   users-api:
     if: github.event_name == 'workflow_dispatch' && inputs.suite == 'users-api'

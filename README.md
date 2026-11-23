@@ -29,7 +29,7 @@ Use the [authoring guide and complete examples](AGENTS.md) and the [API scenario
 
 ## GitHub Actions and QA
 
-Pull requests compile the scenarios and resolve step bindings. Set the repository variable `E2E_BASE_URL` to a storefront URL reachable by GitHub Actions and backed by a populated catalog. The smoke runs on pull requests from branches in this repository and pushes to `main`. You can also dispatch **Storefront E2E** with a `base_url`.
+Pull requests compile the scenarios and resolve step bindings. Set the repository secret `E2E_BASE_URL` to a storefront URL reachable by GitHub Actions and backed by a populated catalog. The smoke runs on pull requests from branches in this repository and pushes to `main`. A repository variable of the same name also works for public test addresses. Choose **Storefront E2E** and supply a `base_url` to override both for a manual run. Secret-backed runs publish the manifest and Allure results with the storefront host masked.
 
 The `storefront-test-results` artifact contains Allure results and `storefront-evidence.json` after Playwright runs. The manifest records the PR head, actual checkout, feature hash, workflow run and attempt, and Playwright step outcome. Reruns add an `-attempt-N` suffix to preserve the earlier artifact. Pull request run titles include the PR number and head SHA for correlation.
 
