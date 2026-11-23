@@ -1,4 +1,8 @@
 name: Storefront E2E
+run-name: >-
+  ${{ github.event_name == 'pull_request'
+    && format('Storefront PR #{0} at {1}', github.event.pull_request.number, github.event.pull_request.head.sha)
+    || github.event.head_commit.message || github.workflow }}
 
 on:
   pull_request:
@@ -55,11 +59,18 @@ jobs:
       - run: test -n "$E2E_BASE_URL"
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npm test
+      - name: Run storefront Playwright
+        id: storefront_playwright
+        run: npm test
+      - name: Record storefront evidence
+        if: ${{ always() && (steps.storefront_playwright.outcome == 'success' || steps.storefront_playwright.outcome == 'failure') }}
+        env:
+          STOREFRONT_OUTCOME: ${{ steps.storefront_playwright.outcome }}
+        run: node support/storefront-evidence.js
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: storefront-test-results
+          name: ${{ github.run_attempt == '1' && 'storefront-test-results' || format('storefront-test-results-attempt-{0}', github.run_attempt) }}
           path: TestResults/
 
   users-api:
