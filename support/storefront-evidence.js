@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const featurePath = 'features/catalog/browse-phone-details.feature';
 const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
@@ -23,6 +24,25 @@ if (!['success', 'failure'].includes(playwrightOutcome)) {
 if (pull && (!Number.isSafeInteger(pull.number) || pull.number < 1 || !sha.test(pull.head?.sha ?? ''))) {
   throw new Error('The pull request event did not identify its head revision.');
 }
+
+function redactStorefrontUrl() {
+  const resultsDir = 'TestResults/allure-results';
+  if (!existsSync(resultsDir)) return;
+
+  const baseUrl = process.env.E2E_BASE_URL;
+  const url = URL.parse(baseUrl ?? '');
+  if (!url) throw new Error('The secret storefront URL is invalid.');
+  const variants = [baseUrl, url.href, url.origin, url.hostname].sort((a, b) => b.length - a.length);
+  for (const file of readdirSync(resultsDir, { withFileTypes: true })) {
+    if (!file.isFile() || !/\.(json|md|txt)$/.test(file.name)) continue;
+    const path = join(resultsDir, file.name);
+    const content = readFileSync(path, 'utf8');
+    const redacted = variants.reduce((value, variant) => value.replaceAll(variant, '[storefront]'), content);
+    if (redacted !== content) writeFileSync(path, redacted);
+  }
+}
+
+if (process.env.E2E_STOREFRONT_PRIVATE === 'true') redactStorefrontUrl();
 
 const evidence = {
   schemaVersion: 1,

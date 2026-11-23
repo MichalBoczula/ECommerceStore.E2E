@@ -6,6 +6,8 @@ const testDir = defineBddConfig({
   steps: 'steps/**/*.js',
 });
 
+const retainDiagnostics = process.env.E2E_STOREFRONT_PRIVATE !== 'true';
+
 export default defineConfig({
   testDir,
   timeout: 150_000,
@@ -19,8 +21,8 @@ export default defineConfig({
   outputDir: 'TestResults/playwright-results',
   use: {
     navigationTimeout: 90_000,
-    trace: 'retain-on-failure',
-    screenshot: 'only-on-failure',
+    trace: retainDiagnostics ? 'retain-on-failure' : 'off',
+    screenshot: retainDiagnostics ? 'only-on-failure' : 'off',
   },
   projects: [
     {
